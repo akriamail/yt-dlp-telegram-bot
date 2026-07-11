@@ -1,135 +1,168 @@
-import asyncio
-import os
-import re
-import time
-import logging
-import subprocess
-from dotenv import load_dotenv
-from telegram import Update
-from telegram.ext import ApplicationBuilder, ContextTypes, MessageHandler, filters
+#!/usr/bin/env python3
+"""
+yt-dlp Video Downloader Bot — Unified Entry Point
 
-# 1. 初始化日志
+Supports Telegram and/or Rocket.Chat. Configure via .env or environment variables.
+"""
+
+import asyncio
+import logging
+import os
+import signal
+import sys
+
+from dotenv import load_dotenv
+
+import downloader as dl
+
+load_dotenv()
+
 logging.basicConfig(
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.INFO
+    format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
+    level=logging.INFO,
 )
 logger = logging.getLogger(__name__)
 
-# 2. 加载配置
-load_dotenv()
-TOKEN = os.getenv("TG_TOKEN")
-ALLOWED_USER_ID = int(os.getenv("ALLOWED_USER_ID", 0))
-DOWNLOAD_DIR = os.getenv("DOWNLOAD_DIR", "./downloads")
-LIMIT_RATE = os.getenv("LIMIT_RATE", "15M")
 
-# 确保下载目录存在
-if not os.path.exists(DOWNLOAD_DIR):
-    os.makedirs(DOWNLOAD_DIR)
-    logger.info(f"创建下载目录: {DOWNLOAD_DIR}")
+def _env(key: str, default=""):
+    return os.getenv(key, default)
 
-def update_yt_dlp():
-    """启动时自动检查并更新 yt-dlp"""
-    logger.info("🔄 正在检查 yt-dlp 更新...")
+
+def _env_int(key: str, default: int):
     try:
-        # 使用 pip 升级 yt-dlp
-        subprocess.check_call(["pip3", "install", "-U", "yt-dlp"])
-        logger.info("✅ yt-dlp 已是最新版本")
-    except Exception as e:
-        logger.error(f"❌ 自动更新 yt-dlp 失败: {e}")
+        return int(os.getenv(key, str(default)))
+    except (ValueError, TypeError):
+        return default
 
-async def download_task(url, update: Update, context: ContextTypes.DEFAULT_TYPE):
-    status_msg = await update.message.reply_text("📡 任务已接收，正在初始化解析...")
-    
-    # 链接清洗 (兼容移动端域名及 viewkey 参数)
-    clean_url = url.split('?')[0].replace('m.pornhub.com', 'cn.pornhub.com')
-    if "viewkey=" not in clean_url and "viewkey=" in url:
-        vk_match = re.search(r'viewkey=[a-zA-Z0-9]+', url)
-        if vk_match:
-            clean_url = f"https://cn.pornhub.com/view_video.php?{vk_match.group()}"
 
-    cmd = [
-        "stdbuf", "-oL", "yt-dlp",
-        "--user-agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-        "--no-playlist",
-        "--socket-timeout", "60",
-        "--retries", "10",
-        "--limit-rate", LIMIT_RATE,
-        "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
-        "-P", DOWNLOAD_DIR,
-        "--newline",
-        "--no-mtime",
-        "--exec", "chmod 755 {}",
-        clean_url
-    ]
+def _read_config():
+    """从 .env 读取配置，返回 (config, enable_tg, enable_rc)"""
+    config = dict(
+        download_dir=_env("DOWNLOAD_DIR", "./downloads"),
+        limit_rate=_env("LIMIT_RATE", "15M"),
+        max_concurrent=_env_int("MAX_CONCURRENT", 2),
+        tg_token=_env("TG_TOKEN"),
+        tg_user=_env_int("ALLOWED_USER_ID", 0),
+        rc_server=_env("RC_SERVER", "https://chat.akria.net"),
+        rc_uid=_env("RC_USER_ID"),
+        rc_token=_env("RC_TOKEN"),
+        rc_channel=_env("RC_CHANNEL", "渠道监控"),
+    )
+    enable_tg = bool(config["tg_token"] and config["tg_user"])
+    enable_rc = bool(config["rc_uid"] and config["rc_token"])
 
-    process = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE
+    if not enable_tg and not enable_rc:
+        logger.error("未检测到任何 Bot 配置！")
+        logger.error("   Telegram: 设置 TG_TOKEN + ALLOWED_USER_ID")
+        logger.error("   Rocket.Chat: 设置 RC_USER_ID + RC_TOKEN")
+        sys.exit(1)
+
+    return config, enable_tg, enable_rc
+
+
+# ── 共享事件循环模式（RC 参与时使用）───────────────────────────────────────────
+
+async def amain(config: dict, enable_tg: bool, enable_rc: bool):
+    """在共享事件循环中运行所有 Bot task。收到 CancelledError 时优雅关闭。"""
+    tg_bot = None
+    rc_bot = None
+
+    if enable_rc:
+        from bot_rocketchat import RocketChatBot
+        rc_bot = RocketChatBot(
+            server_url=config["rc_server"],
+            user_id=config["rc_uid"],
+            token=config["rc_token"],
+            channel=config["rc_channel"],
+            download_dir=config["download_dir"],
+            limit_rate=config["limit_rate"],
+            max_concurrent=config["max_concurrent"],
+        )
+
+    if enable_tg:
+        from bot_telegram import TelegramBot
+        tg_bot = TelegramBot(
+            token=config["tg_token"],
+            allowed_user_id=config["tg_user"],
+            download_dir=config["download_dir"],
+            limit_rate=config["limit_rate"],
+        )
+
+    tasks = []
+    if rc_bot:
+        tasks.append(asyncio.create_task(rc_bot.run_forever()))
+    if tg_bot:
+        tasks.append(asyncio.create_task(tg_bot.start_polling()))
+
+    for name, t in zip(
+        [n for n, e in [("RC", rc_bot), ("TG", tg_bot)] if e],
+        tasks,
+    ):
+        logger.info("🚀 %s Bot 已启动（共享事件循环）", name)
+
+    try:
+        done, pending = await asyncio.wait(
+            tasks, return_when=asyncio.FIRST_EXCEPTION,
+        )
+        for t in done:
+            exc = t.exception()
+            if exc and not isinstance(exc, asyncio.CancelledError):
+                logger.error("Bot 异常退出: %s", exc)
+    except asyncio.CancelledError:
+        logger.info("收到关闭信号，正在停止...")
+    finally:
+        for t in tasks:
+            t.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
+        if tg_bot:
+            await tg_bot.stop()
+        if rc_bot:
+            await rc_bot.shutdown()
+        logger.info("Bot 已停止")
+
+
+# ── 入口 ──────────────────────────────────────────────────────────────────────
+
+def main():
+    dl.update_yt_dlp()
+    config, enable_tg, enable_rc = _read_config()
+
+    # ── TG-only: PTB 管理自己的事件循环 ──────────────────────────────────────
+    if enable_tg and not enable_rc:
+        from bot_telegram import TelegramBot
+        bot = TelegramBot(
+            token=config["tg_token"],
+            allowed_user_id=config["tg_user"],
+            download_dir=config["download_dir"],
+            limit_rate=config["limit_rate"],
+        )
+        logger.info("🚀 Telegram Bot 已启动（独立模式）")
+        bot.run()
+        return
+
+    # ── RC 参与：共享事件循环，信号 → cancel → 清理 ──────────────────────────
+    loop = asyncio.new_event_loop()
+    asyncio.set_event_loop(loop)
+
+    main_task = asyncio.ensure_future(
+        amain(config, enable_tg, enable_rc), loop=loop,
     )
 
-    last_update_time = 0
-    while True:
-        line = await process.stdout.readline()
-        if not line:
-            break
-        
-        text_line = line.decode().strip()
-        progress_match = re.search(r'\[download\]\s+(\d+\.\d+)%.*?at\s+([\d\.]+\w+/s)\s+ETA\s+([\d:]+)', text_line)
-        
-        if progress_match:
-            now = time.time()
-            if now - last_update_time >= 10:
-                percent, speed, eta = progress_match.groups()
-                progress_text = (
-                    f"⏳ 正在下载中...\n\n"
-                    f"📊 进度: {percent}%\n"
-                    f"🚀 速度: {speed}\n"
-                    f"⏱️ 剩余: {eta}"
-                )
-                try:
-                    await context.bot.edit_message_text(
-                        chat_id=update.effective_chat.id,
-                        message_id=status_msg.message_id,
-                        text=progress_text
-                    )
-                    last_update_time = now
-                except:
-                    pass
+    # 取消主 task 而非停止 loop，让 amain() 跑完 finally 清理
+    for sig in (signal.SIGINT, signal.SIGTERM):
+        try:
+            loop.add_signal_handler(sig, main_task.cancel)
+        except NotImplementedError:
+            pass
 
-    stdout, stderr = await process.communicate()
+    try:
+        loop.run_until_complete(main_task)
+    except (KeyboardInterrupt, asyncio.CancelledError):
+        pass
+    finally:
+        if not loop.is_closed():
+            loop.close()
 
-    if process.returncode == 0:
-        logger.info(f"下载成功: {url}")
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id,
-            message_id=status_msg.message_id,
-            text="✅ 下载完成！文件已存入本地目录。"
-        )
-    else:
-        logger.error(f"下载失败: {stderr.decode()}")
-        await context.bot.edit_message_text(
-            chat_id=update.effective_chat.id,
-            message_id=status_msg.message_id,
-            text="❌ 下载失败，请检查链接或稍后重试。"
-        )
 
-async def handle_message(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    if update.effective_user.id != ALLOWED_USER_ID:
-        return
-    text = update.message.text.strip()
-    if text.startswith('http'):
-        asyncio.create_task(download_task(text, update, context))
-
-if __name__ == '__main__':
-    # 执行启动自更新
-    update_yt_dlp()
-
-    if not TOKEN:
-        print("❌ 错误: 请在 .env 文件中设置 TG_TOKEN")
-        exit(1)
-
-    print("🚀 视频下载机器人已启动并守候中...")
-    app = ApplicationBuilder().token(TOKEN).build()
-    app.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), handle_message))
-    app.run_polling()
+if __name__ == "__main__":
+    main()
