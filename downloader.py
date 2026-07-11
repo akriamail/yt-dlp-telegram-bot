@@ -37,6 +37,7 @@ def clean_url(url: str) -> str:
 
 def build_cmd(url: str, download_dir: str, limit_rate: str) -> list[str]:
     """构建 yt-dlp 命令"""
+    archive = os.path.join(download_dir, ".archive.txt")
     return [
         "yt-dlp",
         "--user-agent",
@@ -46,6 +47,7 @@ def build_cmd(url: str, download_dir: str, limit_rate: str) -> list[str]:
         "--socket-timeout", "60",
         "--retries", "10",
         "--limit-rate", limit_rate,
+        "--download-archive", archive,
         "-f", "bestvideo[ext=mp4]+bestaudio[ext=m4a]/best[ext=mp4]/best",
         "-P", download_dir,
         "--newline",
