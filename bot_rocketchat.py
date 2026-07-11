@@ -7,6 +7,7 @@ import asyncio
 import json
 import logging
 import re
+import re
 
 import httpx
 import websockets
@@ -71,14 +72,24 @@ class RocketChatBot:
 
     # ── 房间解析 ──────────────────────────────────────────────────────────────
     async def _resolve_room(self, name: str) -> str:
-        name = name.lstrip("#")
+        """解析频道名/群组名/DM → room_id。直接传入 room_id 也可。"""
+        key = name.lstrip("#")
+        # 已经是 room_id（24 位 hex）
+        if re.match(r"^[a-f0-9]{24}$", key, re.I):
+            return key
+        # DM: 使用 username 查找
+        r = await self._http.get("/api/v1/im.list")
+        for im in r.json().get("ims", []):
+            if key.lower() in [u.lower() for u in im.get("usernames", [])]:
+                return im["_id"]
+        # 公开频道 / 私有群组
         for endpoint in ("channels.info", "groups.info"):
-            r = await self._http.get(f"/api/v1/{endpoint}", params={"roomName": name})
+            r = await self._http.get(f"/api/v1/{endpoint}", params={"roomName": key})
             data = r.json()
-            key = endpoint.split(".")[0]
-            if data.get("success") and data.get(key):
-                return data[key]["_id"]
-        raise ValueError(f"Cannot resolve channel/group: {name}")
+            ep = endpoint.split(".")[0]
+            if data.get("success") and data.get(ep):
+                return data[ep]["_id"]
+        raise ValueError(f"Cannot resolve room: {name}")
 
     # ── 下载任务 ──────────────────────────────────────────────────────────────
     async def _download(self, url: str, room_id: str):
