@@ -2,6 +2,12 @@
 
 [简体中文] | [English]
 
+<p align="center">
+  <img src="docs/screenshots/bot-preview.png" alt="yt-dlp Bot Demo" width="700">
+  <br>
+  <em>发送链接 → 自动下载 → 实时进度推送 → WebDAV 同步 NAS → 次日自动清理</em>
+</p>
+
 一个基于 `yt-dlp` 的全能视频下载方案，支持 **Telegram** 和 **Rocket.Chat** 双通道，集成 WebDAV 自动同步与每日自动清理，专为 VPS & NAS 联动打造。
 
 A versatile video downloading bot powered by **yt-dlp**. Supports both **Telegram** and **Rocket.Chat** — deploy anywhere, control from your favorite IM. Designed for VPS & NAS linkage.
