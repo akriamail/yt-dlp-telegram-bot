@@ -35,10 +35,24 @@ def clean_url(url: str) -> str:
     return base
 
 
+# 全局 cookie 文件路径，由 init_cookies() 设置
+_X_COOKIE_FILE: str | None = None
+
+
+def init_cookies():
+    """启动时初始化 cookie（同步包装，实际由 main.py 异步调用后设置）"""
+    pass
+
+
+def set_x_cookie(path: str | None):
+    global _X_COOKIE_FILE
+    _X_COOKIE_FILE = path
+
+
 def build_cmd(url: str, download_dir: str, limit_rate: str) -> list[str]:
     """构建 yt-dlp 命令"""
     archive = os.path.join(download_dir, ".archive.txt")
-    return [
+    cmd = [
         "yt-dlp",
         "--user-agent",
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
@@ -53,8 +67,11 @@ def build_cmd(url: str, download_dir: str, limit_rate: str) -> list[str]:
         "--newline",
         "--no-mtime",
         "--exec", "chmod 755 {}",
-        clean_url(url),
     ]
+    if _X_COOKIE_FILE:
+        cmd.extend(["--cookies", _X_COOKIE_FILE])
+    cmd.append(clean_url(url))
+    return cmd
 
 
 # ── 异步下载 + 进度回调 ────────────────────────────────────────────────────
