@@ -12,10 +12,13 @@ A versatile video downloading bot powered by **yt-dlp**. Supports both **Telegra
 - **Dual Bot Engine** — Telegram and/or Rocket.Chat, run one or both
 - **High Speed** — multi-threaded download with bandwidth limiting
 - **Self-Healing** — auto-updates yt-dlp on startup, never stale
-- **Live Progress** — real-time download speed, percentage, ETA
-- **NAS Ready** — auto-fix permissions (755) + one-command WebDAV sync
+- **Live Progress** — real-time download speed, percentage, ETA pushed to chat
+- **Concurrency Control** — configurable max concurrent downloads (default 2)
+- **Download Archive** — built-in dedup via yt-dlp archive, never re-download the same video
+- **Auto Cleanup** — daily at 3:00 AM, removes files older than 24 hours (NAS sync friendly)
+- **NAS Ready** — auto-fix permissions (755) + one-command WebDAV service for NAS sync
 - **Security** — secrets isolated in `.env`, user ID whitelist for TG
-- **Concurrency Control** — configurable max concurrent downloads
+- **Impersonation Support** — bundled curl-cffi for sites requiring browser fingerprinting (e.g. PornHub)
 
 ---
 
@@ -23,8 +26,8 @@ A versatile video downloading bot powered by **yt-dlp**. Supports both **Telegra
 
 | | Telegram | Rocket.Chat |
 |---|---|---|
-| Listen | User DM | Channel / Group |
-| Trigger | Send URL in DM | Send URL in channel |
+| Listen | User DM | Channel / Group / DM |
+| Trigger | Send URL in DM | Send URL in conversation |
 | Auth | USER_ID whitelist | Personal Access Token |
 | Protocol | HTTP polling (Bot API) | WebSocket (DDP/RealTime) |
 | Progress | Edit bot message | Edit bot message |
@@ -96,9 +99,10 @@ python3 main.py
 ### Rocket.Chat Bot Setup
 
 1. In RC, go to your user profile → **Security** → **Personal Access Tokens**
-2. Create a token, save the `Token` (not just last N chars) and your `User ID`
-3. Make sure the bot user is invited to the target channel/group
+2. Create a token, save the `Token` and your `User ID`
+3. Make sure the bot user is in the target conversation (DM / channel / group)
 4. Set `RC_USER_ID`, `RC_TOKEN`, `RC_CHANNEL` in `.env`
+5. `RC_CHANNEL` accepts: channel name, group name, username (for DM), or raw room ID (24 hex)
 
 ---
 
@@ -113,18 +117,36 @@ See [`.env.example`](.env.example) for all options:
 | `RC_SERVER` | https://chat.akria.net | Rocket.Chat server URL |
 | `RC_USER_ID` | — | RC user ID |
 | `RC_TOKEN` | — | RC Personal Access Token |
-| `RC_CHANNEL` | 渠道监控 | RC channel/group to monitor |
+| `RC_CHANNEL` | — | RC conversation to monitor (name / username / room ID) |
 | `DOWNLOAD_DIR` | ./downloads | Download destination |
 | `LIMIT_RATE` | 15M | Bandwidth limit (yt-dlp syntax) |
 | `MAX_CONCURRENT` | 2 | Max simultaneous downloads |
+| `WEBDAV_USER` | admin | WebDAV auth username |
+| `WEBDAV_PASS` | — | WebDAV auth password |
+| `WEBDAV_PORT` | 8080 | WebDAV server port |
+
+---
+
+## Auto Cleanup
+
+The bot automatically cleans up downloaded files **every day at 3:00 AM**, removing any files older than 24 hours.
+
+This is designed for the **NAS sync workflow**:
+1. Bot downloads video
+2. NAS syncs it via WebDAV (within its sync window)
+3. Bot deletes it next morning
+
+Hidden files (starting with `.`) are preserved — the download archive (`download-archive` dedup) is never deleted.
+
+No configuration needed. Runs in the background automatically on startup.
 
 ---
 
 ## Architecture
 
 ```
-main.py                     ← entry, starts enabled bots
-├── downloader.py           ← shared yt-dlp engine with progress callbacks
+main.py                     ← entry, starts enabled bots + cleanup task
+├── downloader.py           ← shared yt-dlp engine with progress callbacks + daily cleanup
 ├── bot_telegram.py         ← Telegram layer (python-telegram-bot)
 ├── bot_rocketchat.py       ← Rocket.Chat layer (websockets + httpx)
 ├── install.sh              ← interactive or parameterized installer
@@ -141,13 +163,22 @@ chmod +x setup_webdav.sh
 ./setup_webdav.sh
 ```
 
-Then add the WebDAV endpoint to your NAS (Synology / QNAP / ZSpace):
+Then add the WebDAV endpoint to your NAS:
 
 ```
-URL: http://<your-vps-ip>:8080
+URL: http://<your-vps-ip>:<WEBDAV_PORT>
 User: <WEBDAV_USER>
 Pass: <WEBDAV_PASS>
 ```
+
+| NAS | Connection Type | URL |
+|-----|----------------|-----|
+| Synology | Cloud Sync / Remote Mount | `http://<ip>:8080` |
+| QNAP | HybridMount | `http://<ip>:8080` |
+| ZSpace (极空间) | External Device → WebDAV | `http://<ip>:8080` |
+| TrueNAS | Cloud Sync | `http://<ip>:8080` |
+
+Workflow: send link → bot downloads → NAS syncs → bot cleans up next morning.
 
 ---
 
@@ -163,7 +194,7 @@ journalctl -u yt-dlp-bot -f
 
 ## Development
 
-```
+```bash
 pip install -r requirements.txt
 python3 main.py
 ```
