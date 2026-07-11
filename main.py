@@ -35,18 +35,6 @@ def _env_int(key: str, default: int):
         return default
 
 
-def _init_cookies():
-    """初始化各站点的 cookie（启动时执行一次）"""
-    try:
-        from cookie_manager import init_sync as x_init
-        x_cookie = x_init()
-        if x_cookie:
-            dl.set_x_cookie(x_cookie)
-            logger.info("🍪 X cookie 已就绪")
-    except ImportError:
-        pass  # cookie_manager 不存在则跳过
-
-
 def _read_config():
     """从 .env 读取配置，返回 (config, enable_tg, enable_rc)"""
     config = dict(
