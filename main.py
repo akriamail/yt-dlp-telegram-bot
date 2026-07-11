@@ -89,6 +89,7 @@ async def amain(config: dict, enable_tg: bool, enable_rc: bool):
         )
 
     tasks = []
+    tasks.append(asyncio.create_task(dl.daily_cleanup(config["download_dir"])))
     if rc_bot:
         tasks.append(asyncio.create_task(rc_bot.run_forever()))
     if tg_bot:
@@ -129,6 +130,12 @@ def main():
 
     # ── TG-only: PTB 管理自己的事件循环 ──────────────────────────────────────
     if enable_tg and not enable_rc:
+        import threading
+        t = threading.Thread(
+            target=lambda: asyncio.run(dl.daily_cleanup(config["download_dir"])),
+            daemon=True,
+        )
+        t.start()
         from bot_telegram import TelegramBot
         bot = TelegramBot(
             token=config["tg_token"],

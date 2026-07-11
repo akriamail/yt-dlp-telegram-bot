@@ -58,6 +58,33 @@ def build_cmd(url: str, download_dir: str, limit_rate: str) -> list[str]:
 
 
 # ── 异步下载 + 进度回调 ────────────────────────────────────────────────────
+async def daily_cleanup(download_dir: str):
+    """每天凌晨 3:00 清理超过 24 小时的下载文件"""
+    while True:
+        now = time.time()
+        # 距下次凌晨 3 点的秒数
+        seconds_to_3am = (86400 - (now % 86400) + 3 * 3600) % 86400
+        await asyncio.sleep(seconds_to_3am)
+
+        cutoff = time.time() - 86400
+        deleted = 0
+        if not os.path.isdir(download_dir):
+            continue
+        for f in os.listdir(download_dir):
+            path = os.path.join(download_dir, f)
+            if not os.path.isfile(path) or f.startswith("."):
+                continue
+            try:
+                if os.path.getmtime(path) < cutoff:
+                    os.remove(path)
+                    deleted += 1
+                    logger.info("🗑️ 每日清理: %s", f)
+            except Exception as e:
+                logger.warning("清理失败 %s: %s", f, e)
+        if deleted:
+            logger.info("✅ 每日清理 %d 个文件", deleted)
+
+
 async def run_download(
     url: str,
     download_dir: str,
