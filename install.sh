@@ -86,8 +86,15 @@ fi
 
 # ── 系统依赖 ────────────────────────────────────────────────────────────────
 echo "📦 安装系统依赖..."
-apt-get update -qq
-apt-get install -y -qq ffmpeg python3-pip python3-venv curl
+apt-get update -qq -o APT::Update::Error-Mode=any 2>/dev/null || apt-get update -qq 2>/dev/null || true
+apt-get install -y -qq ffmpeg python3-pip python3-venv curl 2>&1 | tail -5
+
+# ── Python 版本检查 ─────────────────────────────────────────────────────────
+PY_VER=$(python3 --version 2>/dev/null | grep -oP '\d+\.\d+')
+if [ -n "$PY_VER" ] && [ "$(echo "$PY_VER" | cut -d. -f1)" -eq 3 ] && [ "$(echo "$PY_VER" | cut -d. -f2)" -lt 11 ]; then
+    echo "⚠️  系统 Python 版本 ($PY_VER) 低于推荐的 3.11，部分功能可能受限"
+    echo "   建议升级: apt install python3.11 python3.11-venv"
+fi
 
 # ── 交互式配置 ──────────────────────────────────────────────────────────────
 if ! $AI_MODE; then

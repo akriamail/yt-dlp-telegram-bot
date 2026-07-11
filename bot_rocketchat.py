@@ -72,16 +72,19 @@ class RocketChatBot:
 
     # ── 房间解析 ──────────────────────────────────────────────────────────────
     async def _resolve_room(self, name: str) -> str:
-        """解析频道名/群组名/DM → room_id。直接传入 room_id 也可。"""
+        """解析频道名/群组名/用户名/room_id → room_id。"""
         key = name.lstrip("#")
         # 已经是 room_id（24 位 hex）
         if re.match(r"^[a-f0-9]{24}$", key, re.I):
             return key
-        # DM: 使用 username 查找
-        r = await self._http.get("/api/v1/im.list")
-        for im in r.json().get("ims", []):
-            if key.lower() in [u.lower() for u in im.get("usernames", [])]:
-                return im["_id"]
+        # DM：用 spotlight 搜索用户，找到后创建或获取现有 IM room
+        r = await self._http.get("/api/v1/spotlight", params={"query": key})
+        users = r.json().get("users", [])
+        if users:
+            r = await self._http.post("/api/v1/im.create", json={"username": users[0]["username"]})
+            room = r.json().get("room", {})
+            if room:
+                return room["_id"]
         # 公开频道 / 私有群组
         for endpoint in ("channels.info", "groups.info"):
             r = await self._http.get(f"/api/v1/{endpoint}", params={"roomName": key})

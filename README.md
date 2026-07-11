@@ -58,10 +58,10 @@ bash install.sh \
 
 # Rocket.Chat only
 bash install.sh \
-  --rc-server "https://chat.akria.net" \
-  --rc-user "v6mAePSF5WgT4ed7D" \
+  --rc-server "https://chat.your-server.com" \
+  --rc-user "your-rc-user-id" \
   --rc-token "your-pat-token" \
-  --rc-channel "渠道监控" \
+  --rc-channel "your-channel" \
   --systemd -y
 
 # Both

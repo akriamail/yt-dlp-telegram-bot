@@ -435,10 +435,10 @@ Asks questions one by one: bot type, tokens, paths, systemd.
 ```bash
 bash install.sh \
   --tg-token "..." --tg-user 123 \
-  --rc-server "https://chat.akria.net" \
-  --rc-user "v6mAePSF5WgT4ed7D" \
-  --rc-token "eJD75g7c..." \
-  --rc-channel "渠道监控" \
+  --rc-server "https://chat.your-server.com" \
+  --rc-user "your-rc-user-id" \
+  --rc-token "your-rc-personal-access-token" \
+  --rc-channel "your-channel" \
   --download-dir "/data/downloads" \
   --limit-rate "20M" \
   --max-concurrent "3" \
