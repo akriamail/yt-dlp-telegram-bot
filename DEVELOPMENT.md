@@ -502,7 +502,7 @@ Full reference — see `.env.example` for defaults.
 |----------|------|---------|-------------|
 | `WEBDAV_USER` | string | `admin` | WebDAV auth username |
 | `WEBDAV_PASS` | string | — | WebDAV auth password |
-| `WEBDAV_PORT` | int | `8080` | WebDAV server port |
+| `WEBDAV_PORT` | int | `8081` | WebDAV server port |
 
 ---
 
@@ -572,10 +572,10 @@ Security concern: the password is passed as a command-line argument to `ExecStar
 
 | NAS | Connection Type | URL |
 |-----|----------------|-----|
-| Synology | Cloud Sync / Remote Mount | `http://<vps-ip>:8080` |
-| QNAP | HybridMount | `http://<vps-ip>:8080` |
-| ZSpace (极空间) | External Device → WebDAV | `http://<vps-ip>:8080` |
-| TrueNAS | Cloud Sync | `http://<vps-ip>:8080` |
+| Synology | Cloud Sync / Remote Mount | `http://<vps-ip>:8081` |
+| QNAP | HybridMount | `http://<vps-ip>:8081` |
+| ZSpace (极空间) | External Device → WebDAV | `http://<vps-ip>:8081` |
+| TrueNAS | Cloud Sync | `http://<vps-ip>:8081` |
 
 ---
 
@@ -628,7 +628,7 @@ systemctl status rclone-webdav.service
 
 # Check firewall (if using ufw)
 ufw status
-# → Ensure port 8080 is open
+# → Ensure port 8081 is open
 ```
 
 ### Download Fails

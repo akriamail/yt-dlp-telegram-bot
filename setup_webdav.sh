@@ -8,7 +8,7 @@ else
     exit 1
 fi
 
-PORT=8080
+PORT=${WEBDAV_PORT:-8081}
 USER=${WEBDAV_USER:-"admin"}
 PASS=${WEBDAV_PASS}
 SYNC_DIR=${DOWNLOAD_DIR:-"/root/yt-dlp-telegram-bot/downloads"}

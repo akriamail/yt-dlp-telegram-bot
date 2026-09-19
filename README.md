@@ -129,7 +129,7 @@ python3 main.py
 | `MAX_CONCURRENT` | 2 | 最大并发下载数 |
 | `WEBDAV_USER` | admin | WebDAV 用户名 |
 | `WEBDAV_PASS` | — | WebDAV 密码 |
-| `WEBDAV_PORT` | 8080 | WebDAV 端口 |
+| `WEBDAV_PORT` | 8081 | WebDAV 端口 |
 
 ---
 
@@ -180,10 +180,10 @@ chmod +x setup_webdav.sh
 
 | NAS 类型 | 连接方式 (Connection Type) | 地址 (URL) |
 |----------|---------------------------|-----------|
-| Synology | Cloud Sync / Remote Mount | `http://<ip>:8080` |
-| QNAP | HybridMount | `http://<ip>:8080` |
-| 极空间 (ZSpace) | 外部设备 → WebDAV | `http://<ip>:8080` |
-| TrueNAS | Cloud Sync | `http://<ip>:8080` |
+| Synology | Cloud Sync / Remote Mount | `http://<ip>:8081` |
+| QNAP | HybridMount | `http://<ip>:8081` |
+| 极空间 (ZSpace) | 外部设备 → WebDAV | `http://<ip>:8081` |
+| TrueNAS | Cloud Sync | `http://<ip>:8081` |
 
 ---
 
